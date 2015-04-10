@@ -1,0 +1,45 @@
+#!/bin/bash
+# chkconfig: 345 91 19
+
+OUSER="oracle"
+OPATH="/u01/product/11.2.0/dbhome_1"
+
+case "$1" in
+  start)
+    echo  "*** Starting Oracle *** "
+    su - $OUSER -c "$OPATH/bin/lsnrctl start"
+    su - $OUSER -c "$OPATH/bin/dbstart"
+    ;;
+  stop)
+    echo  "*** Stopping Oracle *** "
+    su - $OUSER -c "$OPATH/bin/lsnrctl stop"
+    su - $OUSER -c "$OPATH/bin/dbshut"
+    ;;
+  restart)
+    $0 stop
+    $1 start
+  ;;
+  isqlstart)
+    echo  "*** Starting Oracle iSQL Plus *** "
+    su - $OUSER -c "$OPATH/bin/isqlplusctl start"
+    echo "*** Note: You can access service at url:  http://$(hostname):5560/isqlplus"
+  ;;
+  isqlstop)
+    echo  "*** Stopping Oracle iSQL Plus *** "
+    su - $OUSER -c "$OPATH/bin/isqlplusctl stop"
+  ;;
+  emstart)
+    echo  "*** Starting Oracle Enterprise Manager 11g Database Control ***"
+    su - $OUSER -c "$OPATH/bin/emctl start dbconsole"
+    echo "*** Note: You can access service at url:  http://$(hostname):1158/em"
+  ;;
+  emstop)
+    echo  "*** Stopping Oracle Enterprise Manager 11g Database Control ***"
+    su - $OUSER -c "$OPATH/bin/emctl stop dbconsole"
+  ;;
+  *)
+    echo $"Usage: $0 {start|stop|isqlstart|isqlstop|emstart|emstop}"
+    exit 1
+  ;;
+esac
+exit 0

@@ -1,0 +1,39 @@
+#!/bin/bash
+#
+# chkconfig: [xx ..]
+# description: [description]
+#
+# processname: [name]
+#
+
+# Source function library
+. /etc/rc.d/init.d/functions
+
+function do_start {
+  
+}
+
+function do_stop {
+  
+}
+
+function do_restart {
+  do_stop
+  do_start
+}
+
+case "${1:-''}" in
+  'start')
+    do_start
+    ;;
+  'stop')
+    do_stop
+    ;;
+  'restart')
+    do_restart
+    ;;
+  *) # no parameter specified
+    echo "Usage: $SELF start|stop|restart"
+    exit 1
+    ;;
+esac

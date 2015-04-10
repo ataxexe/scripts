@@ -1,0 +1,116 @@
+#!/usr/bin/env ruby
+
+require 'nokogiri'
+require 'httpclient'
+require 'yummi'
+require 'fileutils'
+require 'logger'
+
+module Log
+
+  def logger
+    unless @logger
+      @logger = Logger::new STDOUT
+      @logger.level = Logger::DEBUG
+      @logger.formatter = Yummi::Formatter::LogFormatter.new do |severity, message|
+        "[#{Yummi::Aligner.left severity, 5}] #{message}"
+      end
+    end
+    @logger
+  end
+  
+end
+
+module WebAccess
+  def parse(url)
+    Nokogiri::HTML(get(url.to_s).content)
+  end
+
+  def get(url)
+    @@client ||= HTTPClient::new
+    @@client.get(url)
+  end
+end
+
+class Album
+  include WebAccess, Log, FileUtils
+
+  attr_reader :name, :size
+
+  def initialize(site_url)
+    @url = site_url.to_s
+    @songs = []
+    @size = 0
+
+    @page = parse(@url)
+    @name = @page.css("#EchoTopic > p:nth-child(3) > b:nth-child(1)").text
+    @size = @page.css("#EchoTopic > p:nth-child(3) > b:nth-child(3)").text.to_i
+  end
+
+  def download(output)
+    @output = "#{output}/#{@name}"
+    logger.info "Downloading #{@name} (#{size} songs) into #{output}"
+
+    links = @page.css("a").find_all { |a| (a['href'].end_with? '.mp3') and (a.text == 'Download') }
+    images = @page.css("a").find_all { |a| a['href'].match(/\.(png|jpg|jpeg)$/) }
+
+    logger.info "Found #{links.size} songs!"
+    logger.info "Found #{images.size} album arts!"
+
+    if @size == links.size
+      mkdir_p(@output)
+      cd(@output) do
+        logger.info "Downloading album arts"
+        images.each do |link|
+          art = AlbumArt::new(link['href'])
+          art.download
+        end
+        logger.info "Downloading album songs"
+        links.each do |link|
+          song = Song::new(link['href'])
+          song.download
+        end
+      end
+    else
+      raise Exception::new("Size missmatch: #{@size} != #{links.size}")
+    end
+  end
+
+end
+
+class AlbumArt
+  include WebAccess, Log
+
+  def initialize(url)
+    @url = url
+  end
+
+  def download
+    logger.info "Downloading album art"
+    logger.debug @url
+    `curl -O "#{@url}"`
+    logger.info "Download finished!"
+  end
+
+end
+
+class Song
+  include WebAccess, Log
+
+  def initialize(url)
+    @page = parse(url)
+    @name = @page.css("#EchoTopic > p:nth-child(6) > b:nth-child(3)").text.gsub(/\.mp3$/,'')
+    @url = @page.css("#EchoTopic > p:nth-child(7) > a:nth-child(1)").first['href']
+    logger.debug @url
+  end
+
+  def download
+    logger.info "Downloading #{@name}"
+    `curl -O "#{@url}"`
+    logger.info "Download finished!"
+  end
+end
+
+ARGV.each do |arg|
+  Album::new(arg).download(ENV['HOME'] + "/Music/Game Music")
+end

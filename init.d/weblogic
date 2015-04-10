@@ -1,0 +1,235 @@
+#!/bin/bash
+# chkconfig: 345 92 18
+
+[ -z "$FMW_HOME" ] && FMW_HOME=/oracle/middleware
+
+[ -z "$FMW_DOMAIN_DIR" ] && FMW_DOMAIN_DIR=$FMW_HOME/user_projects/domains
+
+[ -z "$FMW_DOMAIN" ] && FMW_DOMAIN=soa_domain
+
+[ -z "$FMW_DOMAIN_HOME" ] && FMW_DOMAIN_HOME=$FMW_DOMAIN_DIR/$FMW_DOMAIN
+
+[ -z "$ADMIN_SERVER_URL" ] && ADMIN_SERVER_URL=http://localhost:7001
+
+[ -z "$WL_HOME" ] && WL_HOME=$FMW_HOME/wlserver_10.3
+
+USER=oracle
+
+function usage {
+  echo """Usage: $0 [OPTIONS] ACTION [ACTION_OPTIONS]
+    OPTIONS:
+    --domain                                   Sets the current domain
+    --admin-server-url                         Sets the admin server url
+
+    ACTIONS:
+    * Note that optional parameters that takes a managed server may be empty to indicate the AdminServer
+
+    start        [MANAGED-SERVER]              Starts the managed server
+    debug        [MANAGED-SERVER]              Starts the managed server in debug mode (socket listening on port 49768)
+    stop         [MANAGED-SERVER]              Stops the managed server
+    status       [MANAGED-SERVER]              Prints managed server status
+    kill         [MANAGED-SERVER]              Kill of the WebLogic managed server
+    force-kill   [MANAGED-SERVER]              Forces kill of the WebLogic managed server
+    secure       MANAGED-SERVER USER PASSWORD  Creates a file with the security constraints for bypassing authentication
+    cleanup      [MANAGED-SERVER]              Clean ups the server files (leaving the security dir untouched)
+    maven-plugin                               Installs the Weblogic Maven Plugin (needs java and mvn in the PATH)
+    wlst         [SCRIPT-FILE]                 Starts the WebLogic Script Tool and executes the given file
+    log          [MANAGED-SERVER]              Shows the log file for the given managed server.
+    dlog         [MANAGED-SERVER]              Shows the diagnostic log file for the given managed server.
+    out          [MANAGED-SERVER]              Shows the output log file for the given managed server.
+"""
+}
+
+[ "$#" = "0" ] && usage
+
+function get_server {
+  server="AdminServer"
+  [ -n "$1" ] && server="$1"
+  echo "$server"
+}
+
+function get_pid {
+  local server=$(get_server "$1")
+  local weblogic_pid='x'
+  weblogic_pid=$(ps -eo pid,cmd | grep 'weblogic.Server' | grep "\-Dweblogic.Name=$server" | grep $FMW_DOMAIN | grep -v grep | cut -c1-6)
+  echo "$weblogic_pid"
+}
+
+function do_start {
+  [ -n "$1" ] && {
+    echo "*** Starting Managed WebLogic $1 ***"
+    su - $USER -c "$FMW_DOMAIN_HOME/bin/startManagedWebLogic.sh $1 $ADMIN_SERVER_URL &> /dev/null &"
+  } || {
+    echo "*** Starting WebLogic ***"
+    su - $USER -c "$FMW_DOMAIN_HOME/bin/startWebLogic.sh &> /dev/null &"
+  }
+}
+
+function do_debug {
+  export JAVA_OPTIONS="-Xdebug -Xnoagent -Xrunjdwp:transport=dt_socket,address=49768,server=y,suspend=n"
+  do_start "$1"
+}
+
+function do_stop {
+  [ -n "$1" ] && {
+    echo "*** Stopping Managed WebLogic $1 ***"
+    su - $USER -c "$FMW_DOMAIN_HOME/bin/stopManagedWebLogic.sh $1 $ADMIN_SERVER_URL"
+  } || {
+    echo "*** Stopping WebLogic ***"
+    su - $USER -c "$FMW_DOMAIN_HOME/bin/stopWebLogic.sh"
+  }
+}
+
+function do_kill {
+  local pid=$(get_pid "$1")
+  [ -n "$pid" ] && {
+    echo "Killing WebLogic process with id $pid"
+    kill -15 $pid
+  } || {
+    echo "No process id found for $2"
+  }
+}
+
+function do_force_kill {
+  local pid=$(get_pid "$1")
+  [ -n "$pid" ] && {
+    echo "Killing WebLogic process with id $pid"
+    kill -9 $pid
+  } || {
+    echo "No process id found for $2"
+  }
+}
+
+function do_secure {
+  mkdir -p "$FMW_DOMAIN_HOME/servers/$1/security"
+  local file="$FMW_DOMAIN_HOME/servers/$1/security/boot.properties"
+  echo "Creating $file"
+  > $file
+  echo "username=$2" >> $file
+  echo "password=$3" >> $file
+}
+
+function do_print_status {
+  pid=$(get_pid "$1")
+  [ -n "$pid" ] && {
+    echo "Server is running with pid $pid"
+  } || {
+    echo "Server is stopped"
+  }
+}
+
+function do_wlst {
+  . $WL_HOME/server/bin/setWLSEnv.sh
+  java weblogic.WLST
+}
+
+function do_log {
+  local server=$(get_server "$1")
+  echo "$FMW_DOMAIN_HOME/servers/$server/logs/$server.log"
+}
+
+function do_diagnostic_log {
+  local server=$(get_server "$1")
+  echo "$FMW_DOMAIN_HOME/servers/$server/logs/$server-diagnostic.log"
+}
+
+function do_output_log {
+  local server=$(get_server "$1")
+  echo "$FMW_DOMAIN_HOME/servers/$server/logs/$server.out"
+}
+
+function do_cleanup {
+  local server=$(get_server "$1")
+  echo "Cleaning $server"
+  cd $FMW_DOMAIN_HOME/servers/$server
+  rm -rf $(ls | grep -v security)
+}
+
+function do_install_maven_plugin {
+  cd $WL_HOME/server/lib
+  java -jar wljarbuilder.jar -profile weblogic-maven-plugin
+
+  jar xvf weblogic-maven-plugin.jar \
+    META-INF/maven/com.oracle.weblogic/weblogic-maven-plugin/pom.xml
+
+  cp META-INF/maven/com.oracle.weblogic/weblogic-maven-plugin/pom.xml .
+
+  mvn install:install-file \
+    -Dfile=weblogic-maven-plugin.jar \
+    -DpomFile=pom.xml
+}
+
+while [ "$1" != "" ]; do
+  PARAM=`echo $1 | awk -F= '{print $1}'`
+  VALUE=`echo $1 | awk -F= '{print $2}'`
+  case $PARAM in
+    -h | --help)
+      usage
+      ;;
+    --domain)
+      FMW_DOMAIN=$VALUE
+      FMW_DOMAIN_HOME=$FMW_DOMAIN_DIR/$VALUE
+      ;;
+    --admin-server-url)
+      ADMIN_SERVER_URL=$VALUE
+      ;;
+    # From now, assumes that every options was given
+    start)
+      do_start "$2"
+      exit
+      ;;
+    debug)
+      do_debug "$2"
+      exit
+      ;;
+    stop)
+      do_stop "$2"
+      exit
+      ;;
+    status)
+      do_print_status "$2"
+      exit
+      ;;
+    kill)
+      do_kill "$2"
+      exit
+      ;;
+    force-kill)
+      do_force_kill "$2"
+      exit
+      ;;
+    secure)
+      do_secure "$2" "$3" "$4"
+      exit
+      ;;
+    wlst)
+      do_wlst
+      exit
+      ;;
+    maven-plugin)
+      do_install_maven_plugin
+      exit
+      ;;
+    log)
+      do_log "$2"
+      exit
+      ;;
+    dlog)
+      do_diagnostic_log "$2"
+      exit
+      ;;
+    out)
+      do_output_log "$2"
+      exit
+      ;;
+    cleanup)
+      do_cleanup "$2"
+      exit
+      ;;
+    *)
+      echo $"Usage: $0 {start|status|stop|kill|force-kill|secure|cleanup|wlst|log|dlog|out}"
+      exit
+    ;;
+  esac
+  shift
+done
