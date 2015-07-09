@@ -1,0 +1,12 @@
+#!/bin/sh
+
+diskname() {
+  $(hostname).sparsebundle
+}
+
+hdiutil create \
+      -size "$1" \
+      -fs HFS+J \
+      -volname backup \
+      -type SPARSEBUNDLE \
+      $(disk_name)
