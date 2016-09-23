@@ -1,0 +1,5 @@
+#!/bin/bash
+
+source $HOME/.private
+
+java -jar $RUBBER_DUCKY_ENCODER -i "$1" -o "$RUBBER_DUCKY_PATH/inject.bin"

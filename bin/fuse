@@ -1,0 +1,4 @@
+#!/bin/bash
+
+cd ~/jboss/fuse/bin || exit 1
+./karaf debug "$@"

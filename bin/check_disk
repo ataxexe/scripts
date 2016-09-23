@@ -1,0 +1,6 @@
+#!/bin/bash
+
+VOLUME="$1"
+disk_path=$(hdiutil attach -nomount -noverify -noautofsck $VOLUME | tail -n1 | cut -d' ' -f1)
+fsck_hfs -drfy $disk_path
+hdiutil detach $disk_path

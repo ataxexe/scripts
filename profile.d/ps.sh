@@ -68,7 +68,7 @@ ps1_set() {
     esac
 
     if [[ -n "${branch}" ]]; then
-      local status="$(git status -sb)"
+      local status="$(git status -sb 2>/dev/null)"
       if [[ "${status}" == "##"*"[ahead"* ]]; then
         mod="*"
       fi
@@ -124,4 +124,4 @@ ps_trace() {
   set -o xtrace
 }
 
-ps1_set $PS_OPTIONS
+ps1_set "$PS_OPTIONS"

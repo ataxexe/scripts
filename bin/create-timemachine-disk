@@ -1,12 +1,7 @@
 #!/bin/sh
 
-diskname() {
-  $(hostname).sparsebundle
+disk_name() {
+  echo "$(hostname).sparsebundle"
 }
 
-hdiutil create \
-      -size "$1" \
-      -fs HFS+J \
-      -volname backup \
-      -type SPARSEBUNDLE \
-      $(disk_name)
+hdiutil create -size "$1" -fs HFS+J -volname backup -type SPARSEBUNDLE $(disk_name)

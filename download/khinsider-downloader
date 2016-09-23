@@ -112,5 +112,5 @@ class Song
 end
 
 ARGV.each do |arg|
-  Album::new(arg).download(ENV['HOME'] + "/Music/Game Music")
+  Album::new(arg).download(ENV['HOME'] + "/Music/Songs/Game Music")
 end
